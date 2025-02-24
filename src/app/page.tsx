@@ -66,7 +66,7 @@ export default function ChatApp() {
 
   useEffect(() => {
     if (isLoggedIn) {
-      const socketInstance = io("http://localhost:3001", {
+      const socketInstance = io("https://chat-backend2905.onrender.com", {
         query: { username, role },
       });
 
