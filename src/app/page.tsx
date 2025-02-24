@@ -1,101 +1,173 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useRef, useState } from "react";
+import { io, Socket } from "socket.io-client";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+interface Message {
+  _id?: string;
+  content: string;
+  sender: string;
+  timestamp: string;
+  role: string;
+}
+
+export default function ChatApp() {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [username, setUsername] = useState<string>("");
+  const [role, setRole] = useState<string>("user");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const savedUsername = localStorage.getItem("username");
+    const savedRole = localStorage.getItem("role");
+
+    if (savedUsername && savedRole) {
+      setUsername(savedUsername);
+      setRole(savedRole);
+      setIsLoggedIn(true);
+    } else {
+      alert("Welcome to DhrumiL Chat Bot!");
+      const inputRole = prompt("Are you admin? (yes/no)")?.toLowerCase();
+      if (inputRole === "yes") {
+        const adminPassword = prompt("Enter admin password:");
+        if (adminPassword === "DhrumiL") {
+          setRole("admin");
+          setUsername("Admin");
+          localStorage.setItem("username", "Admin");
+          localStorage.setItem("role", "admin");
+          setIsLoggedIn(true);
+        } else {
+          alert("Incorrect admin password!");
+        }
+      } else {
+        alert("You can chat as a user.");
+        setUsername("User");
+        setRole("user");
+        localStorage.setItem("username", "User");
+        localStorage.setItem("role", "user");
+        setIsLoggedIn(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      const socketInstance = io("http://localhost:3001", {
+        query: { username, role },
+      });
+
+      socketInstance.on("connect", () => {
+        console.log("Connected to server");
+        socketInstance.emit("load-messages");
+      });
+
+      socketInstance.on("previous-messages", (previousMessages: Message[]) => {
+        setMessages(previousMessages);
+      });
+
+      socketInstance.on("new-message", (message: Message) => {
+        setMessages((prev) => [...prev, message]);
+      });
+
+      setSocket(socketInstance);
+
+      return () => {
+        socketInstance.disconnect();
+      };
+    }
+  }, [isLoggedIn, username, role]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newMessage.trim() && socket) {
+      const messageData = {
+        content: newMessage,
+        sender: username,
+        role: role,
+        timestamp: new Date().toISOString(),
+      };
+      socket.emit("send-message", messageData);
+      setNewMessage("");
+    }
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="min-h-screen bg-gray-100 p-4 flex items-center justify-center">
+      <Card className="w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle>Chat ({role === "admin" ? "Admin" : "User"})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea
+            id="scroll-area"
+            className="h-[60vh] w-full rounded-md border p-4"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+            {messages.map((message, index) => (
+              <div
+                key={message._id || index}
+                className={`mb-4 flex ${
+                  message.sender === username ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                    message.sender === username
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  }`}
+                >
+                  <div className="text-sm font-semibold mb-1">
+                    {/* {message.sender} ({message.role}) */}
+                    {message.sender}
+                  </div>
+                  <div className="w-full overflow-auto">{message.content}</div>
+                  <div className="text-xs opacity-70 mt-1">
+                    {new Date(message.timestamp).toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </ScrollArea>
+        </CardContent>
+        <CardFooter>
+          <form onSubmit={sendMessage} className="flex w-full space-x-2">
+            <Input
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type your message..."
+              className="flex-grow"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            <Button type="submit">Send</Button>
+          </form>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
