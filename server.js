@@ -37,7 +37,10 @@ const Message =
 const server = http.createServer();
 const io = new Server(server, {
   cors: {
-    origin: "https://chat-frontend-dun-seven.vercel.app/",
+    origin: [
+      "https://chat-frontend-dun-seven.vercel.app", // Frontend deployed on Vercel
+      "http://localhost:3000", // Local development
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -78,6 +81,7 @@ io.on("connection", (socket) => {
 server.listen(3001, () => {
   console.log("🚀 Server running on port 3001");
 });
+
 // import { Server } from "socket.io";
 // import mongoose from "mongoose";
 // import http from "http";
