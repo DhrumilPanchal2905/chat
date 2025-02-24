@@ -55,9 +55,9 @@ const nextConfig = {
     NEXT_APP_BASE_URL: process.env.NEXT_APP_BASE_URL,
     MONGODB_URI: process.env.MONGODB_URI,
   },
-  future: {
-    webpack5: true,
-  },
+  // future: {
+  //   webpack5: true,
+  // },
   // ...other configurations
 };
 
