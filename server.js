@@ -37,10 +37,7 @@ const Message =
 const server = http.createServer();
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "https://chat-frontend-dun-seven.vercel.app/",
-    ],
+    origin: "https://chat-frontend-dun-seven.vercel.app/",
     methods: ["GET", "POST"],
     credentials: true,
   },
