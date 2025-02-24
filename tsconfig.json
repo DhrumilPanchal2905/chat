@@ -8,7 +8,7 @@
     "noEmit": true,
     "esModuleInterop": true,
     "outDir": "./dist",
-    "module": "esnext",
+    "module": "CommonJS",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
