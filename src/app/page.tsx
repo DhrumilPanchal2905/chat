@@ -1,4 +1,3 @@
-// Updated ChatApp with file sharing functionality and improved error handling
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -13,27 +12,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Upload } from "lucide-react";
 
 interface Message {
   _id?: string;
-  content?: string;
+  content: string;
   sender: string;
   timestamp: string;
   role: string;
   fileUrl?: string;
-  fileType?: string;
-  fileName?: string;
 }
 
 export default function ChatApp() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [username, setUsername] = useState<string>("");
   const [role, setRole] = useState<string>("user");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,49 +99,32 @@ export default function ChatApp() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((newMessage.trim() || selectedFile) && socket) {
-      let messageData: Message = {
+    if (socket) {
+      const messageData: Message = {
+        content: newMessage,
         sender: username,
         role: role,
         timestamp: new Date().toISOString(),
       };
 
-      if (selectedFile) {
-        try {
-          const formData = new FormData();
-          formData.append("file", selectedFile);
-          const response = await fetch("http://localhost:3001/upload", {
-            method: "POST",
-            body: formData,
-          });
-          if (!response.ok) {
-            throw new Error("File upload failed");
-          }
-          const data = await response.json();
-          messageData = {
-            ...messageData,
-            fileUrl: data.fileUrl,
-            fileType: selectedFile.type,
-            fileName: selectedFile.name,
-          };
-          setSelectedFile(null);
-        } catch (error) {
-          console.error("Error uploading file:", error);
-          return;
-        }
-      } else {
-        messageData.content = newMessage;
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("sender", username);
+        formData.append("role", role);
+
+        const response = await fetch("http://localhost:3001/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+        messageData.fileUrl = data.fileUrl;
+        setFile(null);
       }
 
       socket.emit("send-message", messageData);
       setNewMessage("");
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
     }
   };
 
@@ -164,10 +143,7 @@ export default function ChatApp() {
           <CardTitle>Chat ({role === "admin" ? "Admin" : "User"})</CardTitle>
         </CardHeader>
         <CardContent>
-          <ScrollArea
-            id="scroll-area"
-            className="h-[60vh] w-full rounded-md border p-4"
-          >
+          <ScrollArea className="h-[60vh] w-full rounded-md border p-4">
             {messages.map((message, index) => (
               <div
                 key={message._id || index}
@@ -178,8 +154,8 @@ export default function ChatApp() {
                 <div
                   className={`max-w-[70%] rounded-lg px-4 py-2 ${
                     message.sender === username
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
                   }`}
                 >
                   <div className="text-sm font-semibold mb-1">
@@ -189,10 +165,9 @@ export default function ChatApp() {
                     <a
                       href={message.fileUrl}
                       target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline text-blue-500"
+                      className="text-blue-500"
                     >
-                      {message.fileName}
+                      View File
                     </a>
                   ) : (
                     <div className="w-full overflow-auto">
@@ -211,22 +186,14 @@ export default function ChatApp() {
         <CardFooter>
           <form onSubmit={sendMessage} className="flex w-full space-x-2">
             <Input
+              type="file"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+            />
+            <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type your message..."
               className="flex-grow"
-            />
-            <Button
-              type="button"
-              onClick={() => document.getElementById("file-input")?.click()}
-            >
-              <Upload className="w-5 h-5" />
-            </Button>
-            <Input
-              type="file"
-              id="file-input"
-              className="hidden"
-              onChange={handleFileChange}
             />
             <Button type="submit">Send</Button>
           </form>
