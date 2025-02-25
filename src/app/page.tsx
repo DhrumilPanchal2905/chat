@@ -1,3 +1,4 @@
+// Updated ChatApp with file sharing functionality
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -12,19 +13,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Upload } from "lucide-react";
 
 interface Message {
   _id?: string;
-  content: string;
+  content?: string;
   sender: string;
   timestamp: string;
   role: string;
+  fileUrl?: string;
+  fileType?: string;
+  fileName?: string;
 }
 
 export default function ChatApp() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [username, setUsername] = useState<string>("");
   const [role, setRole] = useState<string>("user");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -66,7 +72,7 @@ export default function ChatApp() {
 
   useEffect(() => {
     if (isLoggedIn) {
-      const socketInstance = io("https://chat-backend2905.onrender.com", {
+      const socketInstance = io("http://localhost:3001", {
         query: { username, role },
       });
 
@@ -95,17 +101,43 @@ export default function ChatApp() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = (e: React.FormEvent) => {
+  const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newMessage.trim() && socket) {
-      const messageData = {
-        content: newMessage,
+    if ((newMessage.trim() || selectedFile) && socket) {
+      let messageData: Message = {
         sender: username,
         role: role,
         timestamp: new Date().toISOString(),
       };
+
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+        const response = await fetch("http://localhost:3001/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await response.json();
+        messageData = {
+          ...messageData,
+          fileUrl: data.fileUrl,
+          fileType: selectedFile.type,
+          fileName: selectedFile.name,
+        };
+        setSelectedFile(null);
+      } else {
+        messageData.content = newMessage;
+      }
+
       socket.emit("send-message", messageData);
       setNewMessage("");
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
     }
   };
 
@@ -143,10 +175,22 @@ export default function ChatApp() {
                   }`}
                 >
                   <div className="text-sm font-semibold mb-1">
-                    {/* {message.sender} ({message.role}) */}
                     {message.sender}
                   </div>
-                  <div className="w-full overflow-auto">{message.content}</div>
+                  {message.fileUrl ? (
+                    <a
+                      href={message.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline text-blue-500"
+                    >
+                      {message.fileName}
+                    </a>
+                  ) : (
+                    <div className="w-full overflow-auto">
+                      {message.content}
+                    </div>
+                  )}
                   <div className="text-xs opacity-70 mt-1">
                     {new Date(message.timestamp).toLocaleTimeString()}
                   </div>
@@ -163,6 +207,18 @@ export default function ChatApp() {
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="Type your message..."
               className="flex-grow"
+            />
+            <Button
+              type="button"
+              onClick={() => document.getElementById("file-input")?.click()}
+            >
+              <Upload className="w-5 h-5" />
+            </Button>
+            <Input
+              type="file"
+              id="file-input"
+              className="hidden"
+              onChange={handleFileChange}
             />
             <Button type="submit">Send</Button>
           </form>
