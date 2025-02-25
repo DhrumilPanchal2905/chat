@@ -14,7 +14,7 @@ const connectToDatabase = async () => {
     await mongoose.connect(
       process.env.MONGODB_URI || "mongodb://localhost:27017/chat-app",
       {
-        dbName: "ChatAppDB",
+        dbName: "NewChatAppDB", // New DB name
       }
     );
     console.log("✅ MongoDB connected successfully");
@@ -34,7 +34,7 @@ const messageSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
 });
 
-const Message = mongoose.model("Message", messageSchema);
+const Message = mongoose.model("ChatMessages", messageSchema); // New Collection Name
 
 // Express App Setup
 const app = express();
@@ -73,14 +73,29 @@ const upload = multer({ storage });
 // Serve static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// File Upload Endpoint
-app.post("/upload", upload.single("file"), (req, res) => {
+// File Upload Endpoint - Directly Save to DB
+app.post("/upload", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
 
   const fileUrl = `http://localhost:3001/uploads/${req.file.filename}`;
-  res.json({ fileUrl });
+  const newFileMessage = new Message({
+    sender: req.body.sender || "Anonymous",
+    content: req.body.content || "",
+    fileUrl: fileUrl,
+    fileName: req.file.originalname,
+    fileType: req.file.mimetype,
+  });
+
+  try {
+    const savedFile = await newFileMessage.save();
+    io.emit("new-message", savedFile); // Notify clients
+    res.json({ success: true, message: savedFile });
+  } catch (error) {
+    console.error("❌ Error saving file message:", error);
+    res.status(500).json({ error: "File saving failed" });
+  }
 });
 
 // Socket.io Connections
@@ -101,9 +116,9 @@ io.on("connection", async (socket) => {
       const newMessage = new Message({
         sender: msg.sender,
         content: msg.content,
-        fileUrl: msg.fileUrl,
-        fileName: msg.fileName,
-        fileType: msg.fileType,
+        fileUrl: msg.fileUrl || "",
+        fileName: msg.fileName || "",
+        fileType: msg.fileType || "",
       });
       await newMessage.save(); // Save message to MongoDB
       io.emit("new-message", newMessage); // Broadcast to all clients
