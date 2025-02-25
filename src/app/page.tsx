@@ -1,4 +1,4 @@
-// Updated ChatApp with file sharing functionality
+// Updated ChatApp with file sharing functionality and improved error handling
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -111,20 +111,28 @@ export default function ChatApp() {
       };
 
       if (selectedFile) {
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        const response = await fetch("http://localhost:3001/upload", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await response.json();
-        messageData = {
-          ...messageData,
-          fileUrl: data.fileUrl,
-          fileType: selectedFile.type,
-          fileName: selectedFile.name,
-        };
-        setSelectedFile(null);
+        try {
+          const formData = new FormData();
+          formData.append("file", selectedFile);
+          const response = await fetch("http://localhost:3001/upload", {
+            method: "POST",
+            body: formData,
+          });
+          if (!response.ok) {
+            throw new Error("File upload failed");
+          }
+          const data = await response.json();
+          messageData = {
+            ...messageData,
+            fileUrl: data.fileUrl,
+            fileType: selectedFile.type,
+            fileName: selectedFile.name,
+          };
+          setSelectedFile(null);
+        } catch (error) {
+          console.error("Error uploading file:", error);
+          return;
+        }
       } else {
         messageData.content = newMessage;
       }
