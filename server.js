@@ -1,85 +1,77 @@
-import { Server } from "socket.io";
-import mongoose from "mongoose";
-import http from "http";
-import dotenv from "dotenv";
+// Backend server for file uploads and messaging
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const multer = require("multer");
+const path = require("path");
+const cors = require("cors");
+const { v4: uuidv4 } = require("uuid");
 
-dotenv.config();
-
-const connectToDatabase = async () => {
-  try {
-    await mongoose.connect(
-      process.env.MONGODB_URI || "mongodb://localhost:27017/chat-app",
-      {
-        dbName: "ChatAppDB",
-      }
-    );
-    console.log("✅ MongoDB connected successfully");
-  } catch (error) {
-    console.error("❌ MongoDB connection failed:", error);
-  }
-};
-
-connectToDatabase();
-
-const MessageSchema = new mongoose.Schema(
-  {
-    content: { type: String, required: true },
-    sender: { type: String, required: true },
-    role: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now },
-  },
-  { collection: "ChatMessages" }
-);
-
-const Message =
-  mongoose.models.Message || mongoose.model("Message", MessageSchema);
-
-const server = http.createServer();
+const app = express();
+const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [
-      "https://chat-frontend-dun-seven.vercel.app", // Frontend deployed on Vercel
-      "http://localhost:3000", // Local development
-    ],
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
-    credentials: true,
   },
 });
 
+app.use(cors());
+app.use(express.json());
+
+// Store uploaded files
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/");
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${uuidv4()}${path.extname(
+      file.originalname
+    )}`;
+    cb(null, uniqueSuffix);
+  },
+});
+
+const upload = multer({ storage });
+
+// Serve static files
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// In-memory message storage (replace with DB in production)
+const messages = [];
+
+// File upload endpoint
+app.post("/upload", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  const fileUrl = `http://localhost:3001/uploads/${req.file.filename}`;
+  res.json({ fileUrl });
+});
+
+// Socket.io connections
 io.on("connection", (socket) => {
-  const { username, role } = socket.handshake.query;
-  console.log(`🔗 ${username} (${role}) connected`);
+  console.log("User connected:", socket.id);
 
-  socket.on("load-messages", async () => {
-    try {
-      const messages = await Message.find().sort({ timestamp: -1 }).limit(50);
-      socket.emit("previous-messages", messages.reverse());
-    } catch (error) {
-      console.error("Error loading messages:", error);
-    }
+  // Send previous messages
+  socket.emit("previous-messages", messages);
+
+  // Listen for new messages
+  socket.on("send-message", (msg) => {
+    const messageWithId = { ...msg, _id: uuidv4() };
+    messages.push(messageWithId);
+    io.emit("new-message", messageWithId);
   });
 
-  socket.on("send-message", async (messageData) => {
-    try {
-      const message = new Message({
-        content: messageData.content,
-        sender: messageData.sender,
-        role: messageData.role,
-      });
-      await message.save();
-      io.emit("new-message", message);
-    } catch (error) {
-      console.error("Error sending message:", error);
-    }
-  });
-
+  // Handle disconnects
   socket.on("disconnect", () => {
-    console.log(`🔌 ${username} disconnected`);
+    console.log("User disconnected:", socket.id);
   });
 });
 
-server.listen(3001, () => {
-  console.log("🚀 Server running on port 3001");
+const PORT = 3001;
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
 
 // import { Server } from "socket.io";
