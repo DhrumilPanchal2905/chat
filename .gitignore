@@ -9,8 +9,6 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-service-account.json
-lofty-dynamics-397609-9dc74764cdcf.json
 
 # testing
 /coverage
